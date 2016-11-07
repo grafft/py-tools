@@ -2,76 +2,88 @@ import sys
 import re
 
 ARTICLE_P_ENTRY = """
-@article{{article{number},
+@article{{kuzreview{number},
   author  = {{{data[authors]}}},
   title   = {{{data[title]}}},
   journal = {{{data[journal]}}},
   year    = {data[year]},
-  issue  = {data[issue]},
-  pages   = {{{data[pages]}}}
+  issue  = {{{data[issue]}}},
+  pages   = {{{data[pages]}}},
+  language = {{russian}}
 }}
 """
 
 ARTICLE_ENTRY = """
-@article{{article{number},
+@article{{kuzreview{number},
   author  = {{{data[authors]}}},
   title   = {{{data[title]}}},
   journal = {{{data[journal]}}},
   year    = {data[year]},
-  issue  = {data[issue]}
+  issue  = {{{data[issue]}}},
+  language = {{russian}}
 }}
 """
 
 BOOK_ENTRY = """
-@book{{book{number},
+@book{{kuzreview{number},
   author    = {{{data[authors]}}},
   title     = {{{data[title]}}},
   publisher = {{{data[publisher]}}},
   year      = {data[year]},
-  address   = {{{data[city]}}}
+  address   = {{{data[city]}}},
+  language = {{russian}}
 }}
 """
 
 THESIS_ENTRY = """
-@phdthesis{{phdthesis{number},
+@phdthesis{{kuzreview{number},
   author       = {{{data[authors]}}},
   title        = {{{data[title]}}},
   year         = {data[year]},
-  address      = {{{data[city]}}}
+  address      = {{{data[city]}}},
+  language = {{russian}}
 }}
 """
 
 INBOOK_ENTRY = """
-@incollection{{incollection{number},
+@incollection{{kuzreview{number},
   author       = {{{data[authors]}}},
   title        = {{{data[title]}}},
   booktitle    = {{{data[booktitle]}}},
   publisher    = {{{data[publisher]}}},
   year         = {data[year]},
-  address      = {{{data[city]}}}
+  address      = {{{data[city]}}},
+  language = {{russian}}
 }}
 """
 
 INBOOK_P_ENTRY = """
-@incollection{{incollection{number},
+@incollection{{kuzreview{number},
   author       = {{{data[authors]}}},
   title        = {{{data[title]}}},
   booktitle    = {{{data[booktitle]}}},
   pages        = {{{data[pages]}}},
   publisher    = {{{data[publisher]}}},
   year         = {data[year]},
-  address      = {{{data[city]}}}
+  address      = {{{data[city]}}},
+  language = {{russian}}
 }}
 """
 
 
-def _parse_article(i, text):
+def _parse_authors(text, endpos):
     authors = ''
-    pa = re.compile('[А-Я]\S+\s+([А-Я]\.){1,2}')
-    for ma in pa.finditer(text, endpos=text.find('//')):
+    pa = re.compile('(?P<lastname>[А-Я]\S+)\s+(?P<initials>([А-Я]\.){1,2})')
+    for ma in pa.finditer(text, endpos=endpos):
         if authors:
             authors += ' and '
-        authors += ma.group()
+        authors += '{}, {}'.format(ma.groupdict()['lastname'], ma.groupdict()['initials'])
+
+    return authors
+
+
+def _parse_article(i, text):
+    authors = _parse_authors(text, text.find('//'))
 
     if 'С.' in text:
         p = re.compile('(\S+\s+([А-Я]\.){1,2},?\s)+\s*(?P<title>[^/]+)//'
@@ -80,6 +92,8 @@ def _parse_article(i, text):
         m = p.match(text)
         if m:
             data = {k: v.strip() for k, v in m.groupdict().items() if v is not None}
+            data['journal'] = data['journal'].rstrip('.').rstrip()
+            data['title'] = data['title'].rstrip('.').rstrip()
             data['authors'] = authors
             return ARTICLE_P_ENTRY.format(number=i, data=data)
         else:
@@ -91,6 +105,8 @@ def _parse_article(i, text):
         m = p.match(text)
         if m:
             data = {k: v.strip() for k, v in m.groupdict().items() if v is not None}
+            data['journal'] = data['journal'].rstrip('.').rstrip()
+            data['title'] = data['title'].rstrip('.').rstrip()
             data['authors'] = authors
             return ARTICLE_ENTRY.format(number=i, data=data)
         else:
@@ -98,32 +114,34 @@ def _parse_article(i, text):
 
 
 def _parse_diss(i, text):
+    authors = _parse_authors(text, text.find('//'))
+
     if 'наук' in text:
-        p = re.compile('(?P<authors>\S+\s+([А-Я]\.){1,2})+\s*(?P<title>.+)(?=Дисс).+'
+        p = re.compile('(\S+\s+([А-Я]\.){1,2},?\s)+\s*(?P<title>.+)(?=Дисс).+'
                        + '(?<=наук\.)\s*(?P<city>[^,]+),\s*(?P<year>\d+)')
         m = p.match(text)
         if m:
             data = {k: v.strip() for k, v in m.groupdict().items()}
+            data['title'] = data['title'].rstrip('.').rstrip()
+            data['authors'] = authors
             return THESIS_ENTRY.format(number=i, data=data)
         else:
             print('Error diss {0}: '.format(i) + text)
     else:
-        p = re.compile('(?P<authors>\S+\s+([А-Я]\.){1,2})+\s*(?P<title>.+)(?=Дисс).+'
+        p = re.compile('(\S+\s+([А-Я]\.){1,2},?\s)+\s*(?P<title>.+)(?=Дисс).+'
                        + '(?<=логии\.)\s*(?P<city>[^,]+),\s*(?P<year>\d+)')
         m = p.match(text)
         if m:
             data = {k: v.strip() for k, v in m.groupdict().items()}
+            data['title'] = data['title'].rstrip('.').rstrip()
+            data['authors'] = authors
             return THESIS_ENTRY.format(number=i, data=data)
         else:
             print('Error diss {0}: '.format(i) + text)
 
+
 def _parse_chapter(i, text):
-    authors = ''
-    pa = re.compile('[А-Я]\S+\s+([А-Я]\.){1,2}')
-    for ma in pa.finditer(text, endpos=text.find('//')):
-        if authors:
-            authors += ' and '
-        authors += ma.group()
+    authors = _parse_authors(text, text.find('//'))
 
     if 'С.' in text:
         p = re.compile('(\S+\s+([А-Я]\.){1,2},?\s)+\s*(?P<title>[^/]+)//'
@@ -132,6 +150,8 @@ def _parse_chapter(i, text):
         m = p.match(text)
         if m:
             data = {k: v.strip() for k, v in m.groupdict().items()}
+            data['booktitle'] = data['booktitle'].rstrip('.').rstrip()
+            data['title'] = data['title'].rstrip('.').rstrip()
             data['authors'] = authors
             return INBOOK_P_ENTRY.format(number=i, data=data)
         else:
@@ -143,6 +163,8 @@ def _parse_chapter(i, text):
         m = p.match(text)
         if m:
             data = {k: v.strip() for k, v in m.groupdict().items()}
+            data['booktitle'] = data['booktitle'].rstrip('.').rstrip()
+            data['title'] = data['title'].rstrip('.').rstrip()
             data['authors'] = authors
             return INBOOK_ENTRY.format(number=i, data=data)
         else:
@@ -150,18 +172,14 @@ def _parse_chapter(i, text):
 
 
 def _parse_book(i, text):
-    authors = ''
-    pa = re.compile('[А-Я][а-яА-Я\-]+,?\s+([А-Я]\.){1,2}')
-    for ma in pa.finditer(text):
-        if authors:
-            authors += ' and '
-        authors += ma.group()
+    authors = _parse_authors(text, -1)
 
     p = re.compile('(\S+\s+([А-Я]\.){1,2},?\s)+\s*(?P<title>[^\.]+)\.'
                    + '\s*(?P<city>[^:]+):\s*(?P<publisher>[^,]+),\s*(?P<year>\d+)')
     m = p.match(text)
     if m:
         data = {k: v.strip() for k, v in m.groupdict().items()}
+        data['title'] = data['title'].rstrip('.').rstrip()
         data['authors'] = authors
         return BOOK_ENTRY.format(number=i, data=data)
     else:
@@ -199,7 +217,7 @@ if __name__ == "__main__":
 
         f = open(sys.argv[1], encoding='cp1251')
         for i, line in enumerate(f):
-            bib = text2bib(i, line)
+            bib = text2bib(i + 1, line)
             if bib:
                 bibs.append(bib)
         for bib in bibs:
